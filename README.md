@@ -86,7 +86,7 @@ import HelloWorld from './components/HelloWorld.vue'
 import GodotConst from 'virtual:godot-const'
 console.log(GodotConst)
 const missing = window.Engine.getMissingFeatures({
-	threads: GodotConst.GODOT_THREADS_ENABLED,
+  threads: GodotConst.GODOT_THREADS_ENABLED,
 })
 console.log(missing)
 const engine = new window.Engine(GodotConst.GODOT_CONFIG)
