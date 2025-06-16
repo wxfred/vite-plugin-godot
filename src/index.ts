@@ -4,7 +4,7 @@ import path from 'path';
 import type { Connect, PluginOption } from 'vite';
 import ViteRestart from 'vite-plugin-restart';
 
-const DEFAULT_GODOT_CONFIG_TOKEN = 'const GODOT_CONFIG = ';
+const GODOT_CONST_PREFIX = 'const GODOT_';
 
 export interface VitePluginGodotConfig {
   /**
@@ -35,14 +35,23 @@ const tokenReplacePlugin = (token: string, replacement: string) => ({
 });
 
 const godotPlugin = (config: VitePluginGodotConfig): PluginOption[] => {
-  const configToken = config.configToken ?? DEFAULT_GODOT_CONFIG_TOKEN;
-
   const htmlFile = `${config.projectName}.html`;
   const jsFile = `${config.projectName}.js`;
 
   const godotHtml = fs.readFileSync(`public/${htmlFile}`, { encoding: 'utf8' });
-  const godotConfigLine = godotHtml.split(/\r?\n/).find((line) => line.startsWith(configToken)) ?? '{}';
-  const godotConfig = godotConfigLine.replace(configToken, '').replace(';', '');
+  const godotConst: Record<string, any> = {};
+  godotHtml.split(/\r?\n/).forEach((line) => {
+    if (!line.startsWith(GODOT_CONST_PREFIX)) return;
+    const splits = line.split('=');
+    const key = splits[0].replace('const', '').trim();
+    let val = splits[1].replace(';', '').trim();
+    if (key === 'GODOT_CONFIG') {
+      const obj = JSON.parse(val);
+      obj.executable = config.projectName;
+      val = JSON.stringify(obj, null, 2);
+    }
+    godotConst[key] = new Function(`return ${val}`)();
+  });
 
   const setHeaders: Connect.NextHandleFunction = (_req, res, next) => {
     res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
@@ -55,7 +64,7 @@ const godotPlugin = (config: VitePluginGodotConfig): PluginOption[] => {
       restart: config.restart ?? ['index.html'],
       reload: config.reload ?? [],
     }),
-    tokenReplacePlugin('$GODOT_CONFIG', godotConfig),
+    tokenReplacePlugin('$GODOT_CONST', JSON.stringify(godotConst)),
     tokenReplacePlugin('$GODOT_JS_FILE', jsFile),
     {
       name: 'remove-godot-html',
@@ -78,6 +87,21 @@ const godotPlugin = (config: VitePluginGodotConfig): PluginOption[] => {
       name: 'configure-preview-server',
       configurePreviewServer(server) {
         server.middlewares.use(setHeaders);
+      },
+    },
+    {
+      name: 'virtual-godot-const',
+      resolveId(id: string) {
+        if (id === 'virtual:godot-const') {
+          return id;
+        }
+        return null;
+      },
+      load(id: string) {
+        if (id === 'virtual:godot-const') {
+          return `export default ${JSON.stringify(godotConst)}`;
+        }
+        return null;
       },
     },
   ];

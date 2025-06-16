@@ -8,6 +8,6 @@
   },
   "devDependencies": {
     "vite": "^4.3.4",
-    "vite-plugin-godot": "workspace:*"
+    "vite-plugin-godot": "file:../../"
   }
 }
